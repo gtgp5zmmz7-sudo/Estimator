@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Estimator">
+    <title>Construction Estimator</title>
+
+    <!-- jsPDF Library for generating client PDFs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #f2f2f7;
+            --card-bg: #ffffff;
+            --accent-color: #007aff;
+            --danger-color: #ff3b30;
+            --text-color: #000000;
+            --secondary-text: #8e8e93;
+            --border-color: #c6c6c8;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px 16px 40px 16px;
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .section {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .section-title {
+            font-size: 13px;
+            text-transform: uppercase;
+            color: var(--secondary-text);
+            margin-bottom: 8px;
+            font-weight: 600;
+            letter-spacing: -0.1px;
+        }
+
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        .form-group:last-child {
+            margin-bottom: 0;
+        }
+
+        label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 10px 12px;
+            font-size: 16px; /* Prevents auto-zoom on iOS */
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: #fff;
+            appearance: none;
+        }
+
+        textarea {
+            resize: vertical;
+            height: 80px;
+        }
+
+        /* Material Item Table/Rows */
+        .item-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .item-row input[type="text"] { flex: 2; }
+        .item-row input[type="number"] { flex: 1; }
+
+        .btn-remove {
+            background: var(--danger-color);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            font-weight: bold;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            text-align: center;
+            border: none;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+
+        .btn-primary { background-color: var(--accent-color); color: white; }
+        .btn-secondary { background-color: #e5e5ea; color: #000; }
+        .btn-outline { background-color: transparent; border: 1px solid var(--accent-color); color: var(--accent-color); }
+
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 16px;
+            border-bottom: 1px solid var(--bg-color);
+        }
+
+        .summary-row:last-child {
+            border-bottom: none;
+            font-weight: 700;
+            font-size: 18px;
+            color: #34c759;
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        #fileInput { display: none; }
+    </style>
+</head>
+<body>
+
+    <h1>Job Estimator</h1>
+
+    <!-- Client & Job Information -->
+    <div class="section">
+        <div class="section-title">Client & Job Info</div>
+        <div class="form-group">
+            <label>Client Name</label>
+            <input type="text" id="clientName" placeholder="John Doe">
+        </div>
+        <div class="form-group">
+            <label>Property Address</label>
+            <input type="text" id="clientAddress" placeholder="123 Main St, Anytown">
+        </div>
+        <div class="form-group">
+            <label>Project Title</label>
+            <input type="text" id="jobTitle" placeholder="Vinyl Siding Installation">
+        </div>
+        <div class="form-group">
+            <label>Scope of Work / Description</label>
+            <textarea id="jobDescription" placeholder="Detailed scope of work presented to client..."></textarea>
+        </div>
+    </div>
+
+    <!-- Material Cost Breakdown (Internal Only) -->
+    <div class="section">
+        <div class="section-title">Materials (Internal Costs)</div>
+        <div id="materialList"></div>
+        <button class="btn btn-secondary" onclick="addMaterialRow()">+ Add Material Line Item</button>
+    </div>
+
+    <!-- Labor & Markup -->
+    <div class="section">
+        <div class="section-title">Labor & Overhead</div>
+        <div class="form-group">
+            <label>Estimated Labor Cost ($)</label>
+            <input type="number" id="laborCost" value="0" step="any" oninput="calculateTotals()">
+        </div>
+        <div class="form-group">
+            <label>Markup / Profit Margin (%)</label>
+            <input type="number" id="markupPercent" value="20" step="any" oninput="calculateTotals()">
+        </div>
+    </div>
+
+    <!-- Internal Summary -->
+    <div class="section">
+        <div class="section-title">Internal Calculation Summary</div>
+        <div class="summary-row">
+            <span>Material Subtotal:</span>
+            <span id="displayMaterialTotal">$0.00</span>
+        </div>
+        <div class="summary-row">
+            <span>Labor Subtotal:</span>
+            <span id="displayLaborTotal">$0.00</span>
+        </div>
+        <div class="summary-row">
+            <span>Final Customer Price:</span>
+            <span id="displayFinalTotal">$0.00</span>
+        </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <button class="btn btn-primary" onclick="generateCustomerPDF()">Generate Client PDF (Summary Only)</button>
+    
+    <div class="actions">
+        <button class="btn btn-outline" onclick="exportData()">Export JSON</button>
+        <button class="btn btn-outline" onclick="document.getElementById('fileInput').click()">Import JSON</button>
+    </div>
+
+    <input type="file" id="fileInput" accept=".json" onchange="importData(event)">
+
+    <script>
+        // State Management
+        let materials = [
+            { id: Date.now(), name: "Material Item 1", qty: 1, cost: 0.00 }
+        ];
+
+        function renderMaterials() {
+            const container = document.getElementById("materialList");
+            container.innerHTML = "";
+
+            materials.forEach((item, index) => {
+                const row = document.createElement("div");
+                row.className = "item-row";
+                row.innerHTML = `
+                    <input type="text" placeholder="Item" value="${item.name}" oninput="updateMaterial(${index}, 'name', this.value)">
+                    <input type="number" placeholder="Qty" value="${item.qty}" step="any" oninput="updateMaterial(${index}, 'qty', parseFloat(this.value) || 0)">
+                    <input type="number" placeholder="Cost ($)" value="${item.cost}" step="any" oninput="updateMaterial(${index}, 'cost', parseFloat(this.value) || 0)">
+                    <button class="btn-remove" onclick="removeMaterialRow(${index})">×</button>
+                `;
+                container.appendChild(row);
+            });
+
+            calculateTotals();
+        }
+
+        function addMaterialRow() {
+            materials.push({ id: Date.now(), name: "", qty: 1, cost: 0.00 });
+            renderMaterials();
+        }
+
+        function removeMaterialRow(index) {
+            materials.splice(index, 1);
+            renderMaterials();
+        }
+
+        function updateMaterial(index, key, value) {
+            materials[index][key] = value;
+            calculateTotals();
+        }
+
+        function calculateTotals() {
+            const materialTotal = materials.reduce((sum, item) => sum + (item.qty * item.cost), 0);
+            const laborTotal = parseFloat(document.getElementById("laborCost").value) || 0;
+            const markup = parseFloat(document.getElementById("markupPercent").value) || 0;
+
+            const subtotal = materialTotal + laborTotal;
+            const finalTotal = subtotal * (1 + (markup / 100));
+
+            document.getElementById("displayMaterialTotal").innerText = `$${materialTotal.toFixed(2)}`;
+            document.getElementById("displayLaborTotal").innerText = `$${laborTotal.toFixed(2)}`;
+            document.getElementById("displayFinalTotal").innerText = `$${finalTotal.toFixed(2)}`;
+
+            return { materialTotal, laborTotal, finalTotal };
+        }
+
+        // PDF Generation (Summary View for Customer)
+        function generateCustomerPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            const clientName = document.getElementById("clientName").value || "Valued Customer";
+            const clientAddress = document.getElementById("clientAddress").value || "N/A";
+            const jobTitle = document.getElementById("jobTitle").value || "Job Estimate";
+            const jobDescription = document.getElementById("jobDescription").value || "No description provided.";
+            const { finalTotal } = calculateTotals();
+
+            // Header
+            doc.setFontSize(22);
+            doc.setFont("helvetica", "bold");
+            doc.text("JOB ESTIMATE", 20, 20);
+
+            // Metadata
+            doc.setFontSize(10);
+            doc.setFont("helvetica", "normal");
+            doc.text(`Date: ${new Date().toLocaleDateString()}`, 20, 30);
+            doc.text(`Client: ${clientName}`, 20, 36);
+            doc.text(`Address: ${clientAddress}`, 20, 42);
+            doc.text(`Project: ${jobTitle}`, 20, 48);
+
+            // Line Separator
+            doc.setLineWidth(0.5);
+            doc.line(20, 54, 190, 54);
+
+            // Scope of Work Title
+            doc.setFontSize(12);
+            doc.setFont("helvetica", "bold");
+            doc.text("SCOPE OF WORK", 20, 64);
+
+            // Scope Body
+            doc.setFontSize(10);
+            doc.setFont("helvetica", "normal");
+            const splitDescription = doc.splitTextToSize(jobDescription, 170);
+            doc.text(splitDescription, 20, 72);
+
+            let currentY = 72 + (splitDescription.length * 6) + 10;
+
+            // Price Box (Only showing Final Price)
+            doc.setFillColor(240, 240, 245);
+            doc.roundedRect(20, currentY, 170, 20, 3, 3, "F");
+
+            doc.setFontSize(12);
+            doc.setFont("helvetica", "bold");
+            doc.text("Total Project Estimate:", 25, currentY + 13);
+            doc.text(`$${finalTotal.toFixed(2)}`, 140, currentY + 13);
+
+            currentY += 35;
+
+            // Terms & Signoff
+            doc.setFontSize(9);
+            doc.setFont("helvetica", "italic");
+            doc.text("This estimate is valid for 30 days. Signature below indicates acceptance of scope and pricing.", 20, currentY);
+
+            currentY += 25;
+            doc.setFont("helvetica", "normal");
+            doc.text("Client Signature: ___________________________          Date: ____________", 20, currentY);
+
+            // Output PDF in Safari Share Sheet
+            doc.output('dataurlnewwindow');
+        }
+
+        // Data Backup & Import
+        function exportData() {
+            const data = {
+                clientName: document.getElementById("clientName").value,
+                clientAddress: document.getElementById("clientAddress").value,
+                jobTitle: document.getElementById("jobTitle").value,
+                jobDescription: document.getElementById("jobDescription").value,
+                laborCost: document.getElementById("laborCost").value,
+                markupPercent: document.getElementById("markupPercent").value,
+                materials: materials
+            };
+
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${data.jobTitle || 'Estimate'}.json`;
+            a.click();
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    document.getElementById("clientName").value = data.clientName || "";
+                    document.getElementById("clientAddress").value = data.clientAddress || "";
+                    document.getElementById("jobTitle").value = data.jobTitle || "";
+                    document.getElementById("jobDescription").value = data.jobDescription || "";
+                    document.getElementById("laborCost").value = data.laborCost || 0;
+                    document.getElementById("markupPercent").value = data.markupPercent || 20;
+                    materials = data.materials || [];
+                    renderMaterials();
+                } catch (err) {
+                    alert("Invalid JSON file format.");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // Initialize
+        renderMaterials();
+    </script>
+</body>
+</html>
